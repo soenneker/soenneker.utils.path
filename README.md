@@ -8,5 +8,5 @@
 ## Installation
 
 ```
-Install-Package Soenneker.Utils.Path
+dotnet add package Soenneker.Utils.Path
 ```
