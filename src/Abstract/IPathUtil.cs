@@ -1,7 +1,5 @@
-using System;
 using System.Threading.Tasks;
 using System.Threading;
-using System.Diagnostics.Contracts;
 
 namespace Soenneker.Utils.Path.Abstract;
 
@@ -18,7 +16,7 @@ public interface IPathUtil
     /// <param name="uri">The URI used to extract the file name.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A unique file path in the specified directory.</returns>
-    ValueTask<string> GetThreadSafeUniqueFilePath(string directory, string uri, CancellationToken cancellationToken = default);
+    ValueTask<string> GetUniqueFilePathFromUri(string directory, string uri, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Generates a random, unique file path in a specified directory with a given file extension.
@@ -27,7 +25,7 @@ public interface IPathUtil
     /// <param name="fileExtension">The desired file extension (e.g., ".txt").</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A unique file path in the specified directory with the specified file extension.</returns>
-    ValueTask<string> GetThreadSafeRandomUniqueFilePath(string directory, string fileExtension, CancellationToken cancellationToken = default);
+    ValueTask<string> GetRandomUniqueFilePath(string directory, string fileExtension, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Generates a random, unique file path in the system's temporary storage directory with a given file extension.
@@ -35,5 +33,14 @@ public interface IPathUtil
     /// <param name="fileExtension">The desired file extension (e.g., ".tmp").</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A unique file path in the system's temporary directory with the specified file extension.</returns>
-    ValueTask<string> GetThreadSafeTempUniqueFilePath(string fileExtension, CancellationToken cancellationToken = default);
+    ValueTask<string> GetRandomTempFilePath(string fileExtension, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets a unique subdirectory inside the system temp directory in a thread-safe manner.
+    /// </summary>
+    /// <param name="prefix">Optional prefix for the folder name.</param>
+    /// <param name="create">Whether to create the directory on disk.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The full path to the unique temp subdirectory.</returns>
+    ValueTask<string> GetUniqueTempDirectory(string? prefix = null, bool create = true, CancellationToken cancellationToken = default);
 }
