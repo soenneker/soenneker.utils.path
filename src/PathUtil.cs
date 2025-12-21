@@ -3,9 +3,10 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Threading;
-using Nito.AsyncEx;
 using System.IO;
 using System.Diagnostics.Contracts;
+using Soenneker.Asyncs.Locks;
+using Soenneker.Extensions.ValueTask;
 
 namespace Soenneker.Utils.Path;
 
@@ -46,7 +47,7 @@ public sealed class PathUtil : IPathUtil
         {
             string tempFilePath = filePath;
 
-            using (await _asyncLock.Value.LockAsync(cancellationToken).ConfigureAwait(false))
+            using (await _asyncLock.Value.Lock(cancellationToken).NoSync())
             {
                 if (!File.Exists(tempFilePath))
                     return tempFilePath;
@@ -67,7 +68,7 @@ public sealed class PathUtil : IPathUtil
             var randomFileName = $"{Guid.NewGuid()}{fileExtension}";
             string filePath = System.IO.Path.Combine(directory, randomFileName);
 
-            using (await _asyncLock.Value.LockAsync(cancellationToken).ConfigureAwait(false))
+            using (await _asyncLock.Value.Lock(cancellationToken).NoSync())
             {
                 // Check if the file path already exists
                 if (!File.Exists(filePath))
@@ -88,7 +89,7 @@ public sealed class PathUtil : IPathUtil
             var randomFileName = $"{Guid.NewGuid()}{fileExtension}";
             string filePath = System.IO.Path.Combine(tempDirectory, randomFileName);
 
-            using (await _asyncLock.Value.LockAsync(cancellationToken).ConfigureAwait(false))
+            using (await _asyncLock.Value.Lock(cancellationToken).NoSync())
             {
                 if (!File.Exists(filePath))
                     return filePath;
@@ -103,7 +104,7 @@ public sealed class PathUtil : IPathUtil
             var dirName = $"{prefix ?? "temp"}_{Guid.NewGuid()}";
             string fullPath = System.IO.Path.Combine(GetTempDirectory(), dirName);
 
-            using (await _asyncLock.Value.LockAsync(cancellationToken).ConfigureAwait(false))
+            using (await _asyncLock.Value.Lock(cancellationToken).NoSync())
             {
                 if (Directory.Exists(fullPath)) 
                     continue;
