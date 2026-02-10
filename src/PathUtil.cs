@@ -1,9 +1,11 @@
 using Soenneker.Utils.Path.Abstract;
+using Soenneker.Utils.ExecutionContexts;
 using System;
 using System.Diagnostics.Contracts;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Soenneker.Extensions.String;
 
 namespace Soenneker.Utils.Path;
 
@@ -31,7 +33,7 @@ public sealed class PathUtil : IPathUtil
     [Pure]
     public static string? GetLastPathSegment(string path)
     {
-        if (string.IsNullOrEmpty(path))
+        if (path.IsNullOrEmpty())
             return null;
 
         ReadOnlySpan<char> span = path.AsSpan();
@@ -117,9 +119,13 @@ public sealed class PathUtil : IPathUtil
             {
                 // Reserve the path. Caller can overwrite later with FileMode.Create if desired.
                 // Use FileShare.None to avoid others opening it while reserved.
-                await using (new FileStream(candidatePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize: 1, FileOptions.None))
+                await ExecutionContextUtil.RunInlineOrOffload(static s =>
                 {
-                }
+                    var path = (string)s!;
+                    using (new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize: 1, FileOptions.None))
+                    {
+                    }
+                }, candidatePath, cancellationToken);
 
                 return candidatePath;
             }
@@ -153,23 +159,24 @@ public sealed class PathUtil : IPathUtil
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (string.IsNullOrEmpty(fileExtension))
+        if (fileExtension.IsNullOrEmpty())
             fileExtension = ".tmp";
         else if (fileExtension[0] != '.')
             fileExtension = "." + fileExtension;
 
-        // GUID collisions are effectively impossible; existence check is a tiny extra guard.
-        while (true)
+        return ExecutionContextUtil.RunInlineOrOffload(static s =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            (string dir, string ext, CancellationToken ct) = ((string, string, CancellationToken))s!;
 
-            string fileName = string.Concat(Guid.NewGuid()
-                                                .ToString("N"), fileExtension);
-            string filePath = System.IO.Path.Combine(directory, fileName);
-
-            if (!File.Exists(filePath))
-                return new ValueTask<string>(filePath);
-        }
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+                string fileName = string.Concat(Guid.NewGuid().ToString("N"), ext);
+                string filePath = System.IO.Path.Combine(dir, fileName);
+                if (!File.Exists(filePath))
+                    return filePath;
+            }
+        }, (directory, fileExtension, cancellationToken), cancellationToken);
     }
 
     /// <summary>
@@ -194,19 +201,19 @@ public sealed class PathUtil : IPathUtil
         else if (fileExtension[0] != '.')
             fileExtension = "." + fileExtension;
 
-        string tempDirectory = _tempDirectory;
-
-        while (true)
+        return ExecutionContextUtil.RunInlineOrOffload(static s =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            (string tempDir, string ext, CancellationToken ct) = ((string, string, CancellationToken))s!;
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+                string fileName = string.Concat(Guid.NewGuid().ToString("N"), ext);
+                string filePath = System.IO.Path.Combine(tempDir, fileName);
 
-            string fileName = string.Concat(Guid.NewGuid()
-                                                .ToString("N"), fileExtension);
-            string filePath = System.IO.Path.Combine(tempDirectory, fileName);
-
-            if (!File.Exists(filePath))
-                return new ValueTask<string>(filePath);
-        }
+                if (!File.Exists(filePath))
+                    return filePath;
+            }
+        }, (_tempDirectory, fileExtension, cancellationToken), cancellationToken);
     }
 
     /// <summary>
@@ -228,38 +235,33 @@ public sealed class PathUtil : IPathUtil
 
         prefix = string.IsNullOrEmpty(prefix) ? "temp" : prefix;
 
-        string tempDirectory = _tempDirectory;
-
-        while (true)
+        return ExecutionContextUtil.RunInlineOrOffload(static s =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            string dirName = string.Concat(prefix, "_", Guid.NewGuid()
-                                                            .ToString("N"));
-            string fullPath = System.IO.Path.Combine(tempDirectory, dirName);
-
-            if (!create)
+            (string tempDir, string pfx, bool doCreate, CancellationToken ct) = ((string, string, bool, CancellationToken))s!;
+            while (true)
             {
-                if (!Directory.Exists(fullPath))
-                    return new ValueTask<string>(fullPath);
+                ct.ThrowIfCancellationRequested();
+                string dirName = string.Concat(pfx, "_", Guid.NewGuid().ToString("N"));
+                string fullPath = System.IO.Path.Combine(tempDir, dirName);
 
-                continue;
-            }
+                if (!doCreate)
+                {
+                    if (!Directory.Exists(fullPath))
+                        return fullPath;
+                    continue;
+                }
 
-            try
-            {
-                // Atomic-ish: if it exists, CreateDirectory returns existing; we treat that as collision and retry.
-                // With GUID names this is basically never, but keeps the semantic.
-                DirectoryInfo info = Directory.CreateDirectory(fullPath);
-
-                // Ensure we actually got the intended directory (defensive).
-                if (string.Equals(info.FullName, fullPath, StringComparison.OrdinalIgnoreCase) || !Directory.Exists(fullPath))
-                    return new ValueTask<string>(fullPath);
+                try
+                {
+                    DirectoryInfo info = Directory.CreateDirectory(fullPath);
+                    if (string.Equals(info.FullName, fullPath, StringComparison.OrdinalIgnoreCase) || !Directory.Exists(fullPath))
+                        return fullPath;
+                }
+                catch (IOException)
+                {
+                    // Collision / transient - retry
+                }
             }
-            catch (IOException)
-            {
-                // Collision / transient - retry
-            }
-        }
+        }, (_tempDirectory, prefix, create, cancellationToken), cancellationToken);
     }
 }
