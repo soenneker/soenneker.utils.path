@@ -41,7 +41,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Soenneker.Extensions.String" Version="4.0.639" />
+        <PackageReference Include="Soenneker.Extensions.String" Version="4.0.640" />
         <PackageReference Include="Soenneker.Extensions.ValueTask" Version="4.0.109" />
         <PackageReference Include="Soenneker.Utils.ExecutionContexts" Version="4.0.12" />
     </ItemGroup>
