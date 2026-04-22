@@ -1,21 +1,20 @@
 using Soenneker.Utils.Path.Abstract;
-using Soenneker.Tests.FixturedUnit;
-using Xunit;
+using Soenneker.Tests.HostedUnit;
 
 
 namespace Soenneker.Utils.Path.Tests;
 
-[Collection("Collection")]
-public class PathUtilTests : FixturedUnitTest
+[ClassDataSource<Host>(Shared = SharedType.PerTestSession)]
+public class PathUtilTests : HostedUnitTest
 {
     private readonly IPathUtil _util;
 
-    public PathUtilTests(Fixture fixture, ITestOutputHelper output) : base(fixture, output)
+    public PathUtilTests(Host host) : base(host)
     {
         _util = Resolve<IPathUtil>(true);
     }
 
-    [Fact]
+    [Test]
     public void Default()
     {
 
