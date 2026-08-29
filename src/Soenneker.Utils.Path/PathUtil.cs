@@ -18,6 +18,7 @@ public sealed class PathUtil : IPathUtil
     /// <summary>
     /// Convenience method to get the temp directory for the current OS. (Path.GetTempPath())
     /// </summary>
+    /// <returns>Convenience method to get the temp directory for the current OS. (Path.GetTempPath()).</returns>
     [Pure]
     public static string GetTempDirectory() => _tempDirectory;
 

@@ -12,6 +12,7 @@ public static class PathUtilRegistrar
     /// <summary>
     /// Adds <see cref="IPathUtil"/> as a singleton service. <para/>
     /// </summary>
+    /// <returns>Adds <see cref="IPathUtil"/> as a singleton service. <para/>.</returns>
     public static IServiceCollection AddPathUtilAsSingleton(this IServiceCollection services)
     {
         services.TryAddSingleton<IPathUtil, PathUtil>();
@@ -21,6 +22,7 @@ public static class PathUtilRegistrar
     /// <summary>
     /// Adds <see cref="IPathUtil"/> as a scoped service. <para/>
     /// </summary>
+    /// <returns>Adds <see cref="IPathUtil"/> as a scoped service. <para/>.</returns>
     public static IServiceCollection AddPathUtilAsScoped(this IServiceCollection services)
     {
         services.TryAddScoped<IPathUtil, PathUtil>();
