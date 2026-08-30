@@ -22,11 +22,55 @@ services.AddPathUtilAsSingleton();
 
 Then inject `IPathUtil` wherever you need it.
 
-## Common operations
+`GetTempDirectory` and `GetLastPathSegment` are static helpers on `PathUtil`. The unique-path and
+temp-directory operations are exposed through `IPathUtil`.
 
-- `GetTempDirectory()` - Convenience method to get the temp directory for the current OS. (Path.GetTempPath()).
-- `GetLastPathSegment()` - Extracts the last segment of a file system path, excluding any trailing directory separators. Returns the last segment of the specified path as a string, or null if the path is null, empty, or consists only of separators.
-- `GetUniqueFilePathFromUri()` - Generates a unique file path based on a specified directory and URI. If a file with the same name exists, a numeric suffix is appended to the file name to ensure uniqueness. Returns a unique file path in the specified directory.
-- `GetRandomUniqueFilePath()` - Generates a random, unique file path in a specified directory with a given file extension. Returns a unique file path in the specified directory with the specified file extension.
-- `GetRandomTempFilePath()` - Generates a random, unique file path in the system's temporary storage directory with a given file extension. Returns a unique file path in the system's temporary directory with the specified file extension.
-- `GetUniqueTempDirectory()` - Gets a unique subdirectory inside the system temp directory in a thread-safe manner. Returns the full path to the unique temp subdirectory.
+## Reserve a file name from a URI
+
+```csharp
+string path = await pathUtil.GetUniqueFilePathFromUri(
+    downloadDirectory,
+    "https://example.com/files/report.pdf",
+    cancellationToken);
+```
+
+This method extracts the URI path's file name and atomically creates an empty file to reserve it.
+If `report.pdf` already exists, it tries `report(1).pdf`, `report(2).pdf`, and so on. The directory
+must already exist. The caller owns the reserved file and should overwrite it or delete it when no
+longer needed. Non-collision filesystem failures propagate rather than being retried forever.
+
+## Generate random candidate paths
+
+```csharp
+string candidate = await pathUtil.GetRandomUniqueFilePath(outputDirectory, ".json", cancellationToken);
+string tempCandidate = await pathUtil.GetRandomTempFilePath("tmp", cancellationToken);
+```
+
+These methods return GUID-based paths that did not exist when checked; they do not create or
+reserve files. Another process can claim a result before it is opened. Use `FileMode.CreateNew`
+when the caller needs atomic ownership and retry on a collision. Extensions with or without a
+leading dot are accepted; path components are discarded.
+
+## Create a temporary directory
+
+```csharp
+string workspace = await pathUtil.GetUniqueTempDirectory("import", create: true, cancellationToken);
+
+try
+{
+    // Use workspace.
+}
+finally
+{
+    Directory.Delete(workspace, recursive: true);
+}
+```
+
+The default `create: true` atomically creates a GUID-suffixed directory below the process temp
+directory. With `create: false`, the method only returns a currently unused candidate and has the
+same check-then-use race as random file paths. Prefix path components are removed. Cleanup remains
+the caller's responsibility.
+
+`PathUtil.GetTempDirectory()` returns the process-cached value of `Path.GetTempPath()`.
+`PathUtil.GetLastPathSegment(path)` ignores trailing platform directory separators and returns
+`null` for empty or separator-only input; it does not access the filesystem.

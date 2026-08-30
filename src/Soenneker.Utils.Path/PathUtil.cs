@@ -9,7 +9,6 @@ using Soenneker.Extensions.String;
 
 namespace Soenneker.Utils.Path;
 
-/// <inheritdoc cref="IPathUtil"/>
 public sealed class PathUtil : IPathUtil
 {
     // Temp path is effectively stable for the process lifetime.
@@ -75,7 +74,6 @@ public sealed class PathUtil : IPathUtil
         return segment.ToString();
     }
 
-    [Pure]
     public async ValueTask<string> GetUniqueFilePathFromUri(string directory, string uri, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -122,22 +120,18 @@ public sealed class PathUtil : IPathUtil
                 // Mirror prior behavior: let this bubble as it's a usage/config issue.
                 throw;
             }
-            catch (IOException)
+            catch (IOException) when (File.Exists(candidatePath) || Directory.Exists(candidatePath))
             {
                 // Exists / collision / race - retry with next suffix
             }
         }
     }
 
-    [Pure]
     public ValueTask<string> GetRandomUniqueFilePath(string directory, string fileExtension, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (fileExtension.IsNullOrEmpty())
-            fileExtension = ".tmp";
-        else if (fileExtension[0] != '.')
-            fileExtension = "." + fileExtension;
+        fileExtension = NormalizeExtension(fileExtension);
 
         return ExecutionContextUtil.RunInlineOrOffload(static s =>
         {
@@ -154,15 +148,11 @@ public sealed class PathUtil : IPathUtil
         }, (directory, fileExtension, cancellationToken), cancellationToken);
     }
 
-    [Pure]
     public ValueTask<string> GetRandomTempFilePath(string fileExtension, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (string.IsNullOrEmpty(fileExtension))
-            fileExtension = ".tmp";
-        else if (fileExtension[0] != '.')
-            fileExtension = "." + fileExtension;
+        fileExtension = NormalizeExtension(fileExtension);
 
         return ExecutionContextUtil.RunInlineOrOffload(static s =>
         {
@@ -179,12 +169,14 @@ public sealed class PathUtil : IPathUtil
         }, (_tempDirectory, fileExtension, cancellationToken), cancellationToken);
     }
 
-    [Pure]
     public ValueTask<string> GetUniqueTempDirectory(string? prefix = null, bool create = true, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        prefix = string.IsNullOrEmpty(prefix) ? "temp" : prefix;
+        prefix = string.IsNullOrEmpty(prefix) ? "temp" : System.IO.Path.GetFileName(prefix.Replace('\\', '/').TrimEnd('/'));
+
+        if (prefix.IsNullOrEmpty())
+            prefix = "temp";
 
         return ExecutionContextUtil.RunInlineOrOffload(static s =>
         {
@@ -205,8 +197,7 @@ public sealed class PathUtil : IPathUtil
                 try
                 {
                     DirectoryInfo info = Directory.CreateDirectory(fullPath);
-                    if (string.Equals(info.FullName, fullPath, StringComparison.OrdinalIgnoreCase) || !Directory.Exists(fullPath))
-                        return fullPath;
+                    return info.FullName;
                 }
                 catch (IOException)
                 {
@@ -214,5 +205,18 @@ public sealed class PathUtil : IPathUtil
                 }
             }
         }, (_tempDirectory, prefix, create, cancellationToken), cancellationToken);
+    }
+
+    private static string NormalizeExtension(string? fileExtension)
+    {
+        if (fileExtension.IsNullOrEmpty())
+            return ".tmp";
+
+        string extension = System.IO.Path.GetFileName(fileExtension.Replace('\\', '/'));
+
+        if (extension.IsNullOrEmpty())
+            return ".tmp";
+
+        return extension[0] == '.' ? extension : "." + extension;
     }
 }

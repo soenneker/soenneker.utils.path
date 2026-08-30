@@ -19,7 +19,7 @@ public interface IPathUtil
     ValueTask<string> GetUniqueFilePathFromUri(string directory, string uri, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Generates a random, unique file path in a specified directory with a given file extension.
+    /// Generates a random file path that does not exist in the specified directory when checked. The path is not reserved.
     /// </summary>
     /// <param name="directory">The directory where the file path should be generated.</param>
     /// <param name="fileExtension">The desired file extension (e.g., ".txt").</param>
@@ -28,7 +28,7 @@ public interface IPathUtil
     ValueTask<string> GetRandomUniqueFilePath(string directory, string fileExtension, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Generates a random, unique file path in the system's temporary storage directory with a given file extension.
+    /// Generates a random temp file path that does not exist when checked. The path is not reserved.
     /// </summary>
     /// <param name="fileExtension">The desired file extension (e.g., ".tmp").</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
@@ -38,7 +38,7 @@ public interface IPathUtil
     /// <summary>
     /// Gets a unique subdirectory inside the system temp directory in a thread-safe manner.
     /// </summary>
-    /// <param name="prefix">Optional prefix for the folder name.</param>
+    /// <param name="prefix">Optional prefix for the folder name. Path components are removed.</param>
     /// <param name="create">Whether to create the directory on disk.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The full path to the unique temp subdirectory.</returns>
