@@ -9,6 +9,7 @@ using Soenneker.Extensions.String;
 
 namespace Soenneker.Utils.Path;
 
+/// <inheritdoc cref="IPathUtil" />
 public sealed class PathUtil : IPathUtil
 {
     // Temp path is effectively stable for the process lifetime.
