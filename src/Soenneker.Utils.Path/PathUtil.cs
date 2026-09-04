@@ -174,7 +174,7 @@ public sealed class PathUtil : IPathUtil
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        prefix = string.IsNullOrEmpty(prefix) ? "temp" : System.IO.Path.GetFileName(prefix.Replace('\\', '/').TrimEnd('/'));
+        prefix = string.IsNullOrEmpty(prefix) ? "temp" : GetPortableFileName(prefix, trimTrailingSeparators: true);
 
         if (prefix.IsNullOrEmpty())
             prefix = "temp";
@@ -213,11 +213,28 @@ public sealed class PathUtil : IPathUtil
         if (fileExtension.IsNullOrEmpty())
             return ".tmp";
 
-        string extension = System.IO.Path.GetFileName(fileExtension.Replace('\\', '/'));
+        string extension = GetPortableFileName(fileExtension, trimTrailingSeparators: false);
 
         if (extension.IsNullOrEmpty())
             return ".tmp";
 
         return extension[0] == '.' ? extension : "." + extension;
+    }
+
+    private static string GetPortableFileName(string value, bool trimTrailingSeparators)
+    {
+        ReadOnlySpan<char> span = value;
+
+        if (trimTrailingSeparators)
+        {
+            while (!span.IsEmpty && span[^1] is '/' or '\\')
+                span = span[..^1];
+        }
+
+        int separator = span.LastIndexOfAny('/', '\\');
+        if (separator >= 0)
+            span = span[(separator + 1)..];
+
+        return span.Length == value.Length ? value : span.ToString();
     }
 }
