@@ -56,16 +56,7 @@ public sealed class PathUtil : IPathUtil
         span = span[..(end + 1)];
 
         // Find last separator (either kind)
-        int lastSep = -1;
-        for (int i = span.Length - 1; i >= 0; i--)
-        {
-            char c = span[i];
-            if (c == System.IO.Path.DirectorySeparatorChar || c == System.IO.Path.AltDirectorySeparatorChar)
-            {
-                lastSep = i;
-                break;
-            }
-        }
+        int lastSep = span.LastIndexOfAny(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
 
         ReadOnlySpan<char> segment = lastSep >= 0 ? span[(lastSep + 1)..] : span;
 
