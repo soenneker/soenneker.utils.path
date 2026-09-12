@@ -9,7 +9,6 @@ using Soenneker.Extensions.String;
 
 namespace Soenneker.Utils.Path;
 
-/// <inheritdoc cref="IPathUtil" />
 public sealed class PathUtil : IPathUtil
 {
     // Temp path is effectively stable for the process lifetime.
@@ -58,82 +57,91 @@ public sealed class PathUtil : IPathUtil
         // Find last separator (either kind)
         int lastSep = span.LastIndexOfAny(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
 
-        ReadOnlySpan<char> segment = lastSep >= 0 ? span[(lastSep + 1)..] : span;
-
-        if (segment.IsEmpty)
-            return null;
-
-        return segment.ToString();
+        return path.Substring(lastSep + 1, end - lastSep);
     }
 
     public async ValueTask<string> GetUniqueFilePathFromUri(string directory, string uri, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        return await ExecutionContextUtil.RunInlineOrOffload(
+            static ((string directory, string uri, CancellationToken cancellationToken) state) =>
+                ReserveUniqueFilePath(state.directory, state.uri, state.cancellationToken),
+            (directory, uri, cancellationToken), cancellationToken).ConfigureAwait(false);
+    }
 
-        string fileName;
+    private static string ReserveUniqueFilePath(string directory, string uri, CancellationToken cancellationToken)
+    {
+        string fileName = Uri.TryCreate(uri, UriKind.Absolute, out Uri? parsed)
+            ? System.IO.Path.GetFileName(parsed.LocalPath)
+            : System.IO.Path.GetFileName(uri);
 
-        if (Uri.TryCreate(uri, UriKind.Absolute, out Uri? parsed))
-            fileName = System.IO.Path.GetFileName(parsed.LocalPath);
-        else
-            fileName = System.IO.Path.GetFileName(uri);
-
-        if (string.IsNullOrEmpty(fileName))
+        if (fileName.IsNullOrEmpty())
             fileName = "file";
 
-        string extension = System.IO.Path.GetExtension(fileName);
-        string baseName = System.IO.Path.GetFileNameWithoutExtension(fileName);
+        ReadOnlySpan<char> extension = default;
+        ReadOnlySpan<char> baseName = default;
 
-        // Try base name first, then add (n) suffixes. We "reserve" atomically by creating the file.
-        // This removes races across threads and processes.
         for (var count = 0;; count++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            string candidateName = count == 0 ? fileName : string.Concat(baseName, "(", count.ToString(), ")", extension);
+            if (count == 1)
+            {
+                extension = System.IO.Path.GetExtension(fileName.AsSpan());
+                baseName = System.IO.Path.GetFileNameWithoutExtension(fileName.AsSpan());
+            }
 
-            string candidatePath = System.IO.Path.Combine(directory, candidateName);
+            string candidatePath = count == 0
+                ? System.IO.Path.Combine(directory, fileName)
+                : CreateSuffixedPath(directory, baseName, extension, count);
+
+            // Once a collision is known, skip occupied suffixes without creating exceptions.
+            // CreateNew still reserves atomically if another caller wins after this check.
+            if (count != 0 && File.Exists(candidatePath))
+                continue;
 
             try
             {
-                // Reserve the path. Caller can overwrite later with FileMode.Create if desired.
-                // Use FileShare.None to avoid others opening it while reserved.
-                await ExecutionContextUtil.RunInlineOrOffload(static s =>
+                using (File.OpenHandle(candidatePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, FileOptions.None))
                 {
-                    var path = (string)s!;
-                    using (new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize: 1, FileOptions.None))
-                    {
-                    }
-                }, candidatePath, cancellationToken);
-
+                }
                 return candidatePath;
             }
             catch (DirectoryNotFoundException)
             {
-                // Mirror prior behavior: let this bubble as it's a usage/config issue.
                 throw;
             }
             catch (IOException) when (File.Exists(candidatePath) || Directory.Exists(candidatePath))
             {
-                // Exists / collision / race - retry with next suffix
+                // Another caller may have reserved the candidate after the existence check.
             }
         }
+    }
+
+    private static string CreateSuffixedPath(string directory, ReadOnlySpan<char> baseName, ReadOnlySpan<char> extension, int count)
+    {
+        if (System.IO.Path.IsPathRooted(baseName))
+            directory = "";
+
+        ReadOnlySpan<char> separator = directory.Length != 0 && !System.IO.Path.EndsInDirectorySeparator(directory)
+            ? (System.IO.Path.DirectorySeparatorChar == '/' ? "/" : "\\")
+            : default;
+        return string.Create(null, $"{directory}{separator}{baseName}({count}){extension}");
     }
 
     public ValueTask<string> GetRandomUniqueFilePath(string directory, string fileExtension, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        fileExtension = NormalizeExtension(fileExtension);
-
-        return ExecutionContextUtil.RunInlineOrOffload(static s =>
+        return ExecutionContextUtil.RunInlineOrOffload(static ((string dir, string ext, CancellationToken ct) s) =>
         {
-            (string dir, string ext, CancellationToken ct) = ((string, string, CancellationToken))s!;
+            (string dir, string ext, CancellationToken ct) = s;
+            ReadOnlySpan<char> extension = NormalizeExtension(ext);
 
             while (true)
             {
                 ct.ThrowIfCancellationRequested();
-                string fileName = string.Concat(Guid.NewGuid().ToString("N"), ext);
-                string filePath = System.IO.Path.Combine(dir, fileName);
+                string filePath = CreateRandomPath(dir, default, extension, true);
                 if (!File.Exists(filePath))
                     return filePath;
             }
@@ -142,42 +150,24 @@ public sealed class PathUtil : IPathUtil
 
     public ValueTask<string> GetRandomTempFilePath(string fileExtension, CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        fileExtension = NormalizeExtension(fileExtension);
-
-        return ExecutionContextUtil.RunInlineOrOffload(static s =>
-        {
-            (string tempDir, string ext, CancellationToken ct) = ((string, string, CancellationToken))s!;
-            while (true)
-            {
-                ct.ThrowIfCancellationRequested();
-                string fileName = string.Concat(Guid.NewGuid().ToString("N"), ext);
-                string filePath = System.IO.Path.Combine(tempDir, fileName);
-
-                if (!File.Exists(filePath))
-                    return filePath;
-            }
-        }, (_tempDirectory, fileExtension, cancellationToken), cancellationToken);
+        return GetRandomUniqueFilePath(_tempDirectory, fileExtension, cancellationToken);
     }
 
     public ValueTask<string> GetUniqueTempDirectory(string? prefix = null, bool create = true, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        prefix = string.IsNullOrEmpty(prefix) ? "temp" : GetPortableFileName(prefix, trimTrailingSeparators: true);
-
-        if (prefix.IsNullOrEmpty())
-            prefix = "temp";
-
-        return ExecutionContextUtil.RunInlineOrOffload(static s =>
+        return ExecutionContextUtil.RunInlineOrOffload(static ((string tempDir, string? pfx, bool doCreate, CancellationToken ct) s) =>
         {
-            (string tempDir, string pfx, bool doCreate, CancellationToken ct) = ((string, string, bool, CancellationToken))s!;
+            (string tempDir, string? pfx, bool doCreate, CancellationToken ct) = s;
+            ReadOnlySpan<char> normalizedPrefix = GetPortableFileName(pfx, trimTrailingSeparators: true);
+            if (normalizedPrefix.IsEmpty)
+                normalizedPrefix = "temp";
+
             while (true)
             {
                 ct.ThrowIfCancellationRequested();
-                string dirName = string.Concat(pfx, "_", Guid.NewGuid().ToString("N"));
-                string fullPath = System.IO.Path.Combine(tempDir, dirName);
+                string fullPath = CreateRandomPath(tempDir, normalizedPrefix, default, false);
 
                 if (!doCreate)
                 {
@@ -199,20 +189,54 @@ public sealed class PathUtil : IPathUtil
         }, (_tempDirectory, prefix, create, cancellationToken), cancellationToken);
     }
 
-    private static string NormalizeExtension(string? fileExtension)
+    private static string CreateRandomPath(string directory, ReadOnlySpan<char> prefix, ReadOnlySpan<char> extension, bool file)
     {
-        if (fileExtension.IsNullOrEmpty())
-            return ".tmp";
+        ArgumentNullException.ThrowIfNull(directory, "path1");
 
-        string extension = GetPortableFileName(fileExtension, trimTrailingSeparators: false);
+        // Preserve Path.Combine semantics for drive-relative prefixes on Windows.
+        if (System.IO.Path.IsPathRooted(prefix))
+            directory = "";
 
-        if (extension.IsNullOrEmpty())
-            return ".tmp";
-
-        return extension[0] == '.' ? extension : "." + extension;
+        bool separator = directory.Length != 0 && !System.IO.Path.EndsInDirectorySeparator(directory);
+        bool dot = file && extension[0] != '.';
+        int length = checked(directory.Length + (separator ? 1 : 0) + prefix.Length + (prefix.Length != 0 ? 1 : 0) + 32 + (dot ? 1 : 0) + extension.Length);
+        return string.Create(length, new RandomPathState(directory, prefix, extension, separator, dot), static (destination, state) =>
+        {
+            ReadOnlySpan<char> dir = state.Directory;
+            ReadOnlySpan<char> pfx = state.Prefix;
+            ReadOnlySpan<char> ext = state.Extension;
+            dir.CopyTo(destination);
+            int offset = dir.Length;
+            if (state.Separator)
+                destination[offset++] = System.IO.Path.DirectorySeparatorChar;
+            pfx.CopyTo(destination[offset..]);
+            offset += pfx.Length;
+            if (pfx.Length != 0)
+                destination[offset++] = '_';
+            Guid.NewGuid().TryFormat(destination.Slice(offset, 32), out _, "N");
+            offset += 32;
+            if (state.Dot)
+                destination[offset++] = '.';
+            ext.CopyTo(destination[offset..]);
+        });
     }
 
-    private static string GetPortableFileName(string value, bool trimTrailingSeparators)
+    private readonly ref struct RandomPathState(ReadOnlySpan<char> directory, ReadOnlySpan<char> prefix, ReadOnlySpan<char> extension, bool separator, bool dot)
+    {
+        public readonly ReadOnlySpan<char> Directory = directory;
+        public readonly ReadOnlySpan<char> Prefix = prefix;
+        public readonly ReadOnlySpan<char> Extension = extension;
+        public readonly bool Separator = separator;
+        public readonly bool Dot = dot;
+    }
+
+    private static ReadOnlySpan<char> NormalizeExtension(string? fileExtension)
+    {
+        ReadOnlySpan<char> extension = GetPortableFileName(fileExtension, trimTrailingSeparators: false);
+        return extension.IsEmpty ? ".tmp" : extension;
+    }
+
+    private static ReadOnlySpan<char> GetPortableFileName(string? value, bool trimTrailingSeparators)
     {
         ReadOnlySpan<char> span = value;
 
@@ -223,9 +247,6 @@ public sealed class PathUtil : IPathUtil
         }
 
         int separator = span.LastIndexOfAny('/', '\\');
-        if (separator >= 0)
-            span = span[(separator + 1)..];
-
-        return span.Length == value.Length ? value : span.ToString();
+        return separator >= 0 ? span[(separator + 1)..] : span;
     }
 }

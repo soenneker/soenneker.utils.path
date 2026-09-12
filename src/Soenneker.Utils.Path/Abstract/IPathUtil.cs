@@ -12,6 +12,7 @@ public interface IPathUtil
     /// Generates a unique file path based on a specified directory and URI. 
     /// If a file with the same name exists, a numeric suffix is appended to the file name to ensure uniqueness.
     /// </summary>
+    /// <remarks>The returned path is reserved atomically by creating an empty file. The caller owns that file.</remarks>
     /// <param name="directory">The directory where the file path should be generated.</param>
     /// <param name="uri">The URI used to extract the file name.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
