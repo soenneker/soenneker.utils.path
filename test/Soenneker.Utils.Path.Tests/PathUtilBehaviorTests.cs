@@ -1,3 +1,6 @@
+using Soenneker.Utils.MemoryStream;
+using Microsoft.Extensions.Logging.Abstractions;
+using Soenneker.Utils.File.Abstract;
 using System;
 using System.IO;
 using System.Linq;
@@ -8,6 +11,8 @@ namespace Soenneker.Utils.Path.Tests;
 
 public class PathUtilBehaviorTests
 {
+    private readonly IFileUtil _fileUtil = new Soenneker.Utils.File.FileUtil(NullLogger<Soenneker.Utils.File.FileUtil>.Instance, new MemoryStreamUtil());
+
     [Test]
     public void LastSegmentPreservesWholeInputAndPlatformSeparators()
     {
@@ -30,7 +35,7 @@ public class PathUtilBehaviorTests
             string name = System.IO.Path.GetFileName(path);
             Check(name.Length == 32 + expected.Length && name.EndsWith(expected, StringComparison.Ordinal));
             Check(Guid.TryParseExact(name[..32], "N", out _));
-            Check(!File.Exists(path));
+            Check(!(await _fileUtil.Exists(path)));
         }
     }
 
@@ -41,13 +46,15 @@ public class PathUtilBehaviorTests
         try
         {
             var util = new PathUtil();
-            File.WriteAllText(System.IO.Path.Combine(root, "a b.txt"), "keep");
-            File.WriteAllText(System.IO.Path.Combine(root, "a b(1).txt"), "keep");
+            await _fileUtil.Write(System.IO.Path.Combine(root, "a b.txt"), "keep");
+            await _fileUtil.Write(System.IO.Path.Combine(root, "a b(1).txt"), "keep");
             string[] paths = await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => Task.Run(async () =>
                 await util.GetUniqueFilePathFromUri(root, "https://example.com/a%20b.txt?ignored=true"))));
-            Check(paths.Distinct().Count() == 16 && paths.All(File.Exists));
+            Check(paths.Distinct().Count() == 16);
+            foreach (string path in paths)
+                Check(await _fileUtil.Exists(path));
             Check(paths.Contains(System.IO.Path.Combine(root, "a b(2).txt")));
-            Check(File.ReadAllText(System.IO.Path.Combine(root, "a b(1).txt")) == "keep");
+            Check((await _fileUtil.Read(System.IO.Path.Combine(root, "a b(1).txt"))) == "keep");
         }
         finally
         {
@@ -105,7 +112,7 @@ public class PathUtilBehaviorTests
         string root = Directory.CreateTempSubdirectory("path-context-tests-").FullName;
         try
         {
-            File.WriteAllText(System.IO.Path.Combine(root, "file.txt"), "keep");
+            await _fileUtil.Write(System.IO.Path.Combine(root, "file.txt"), "keep");
             ValueTask<string> pending;
             SynchronizationContext? original = SynchronizationContext.Current;
             try
@@ -118,7 +125,7 @@ public class PathUtilBehaviorTests
                 SynchronizationContext.SetSynchronizationContext(original);
             }
             string path = await pending;
-            Check(File.Exists(path) && System.IO.Path.GetFileName(path) == "file(1).txt");
+            Check((await _fileUtil.Exists(path)) && System.IO.Path.GetFileName(path) == "file(1).txt");
         }
         finally
         {
