@@ -19,14 +19,14 @@
     <ItemGroup>
         <PackageReference Include="Soenneker.Utils.Test" Version="4.0.331" />
         <PackageReference Include="Soenneker.Tests.HostedUnit" Version="4.0.301" />
-        <PackageReference Include="TUnit" Version="1.72.4" />
+        <PackageReference Include="TUnit" Version="1.72.10" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\Soenneker.Utils.Path\Soenneker.Utils.Path.csproj" />
     </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Soenneker.Utils.File" Version="4.0.2291" />
+    <PackageReference Include="Soenneker.Utils.File" Version="4.0.2292" />
   </ItemGroup>
 </Project>
 
