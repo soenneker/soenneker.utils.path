@@ -25,7 +25,7 @@ public class PathUtilBehaviorTests
     }
 
     [Test]
-    public async Task RandomPathsNormalizePortableExtensionsWithoutReserving()
+    public async ValueTask RandomPathsNormalizePortableExtensionsWithoutReserving()
     {
         var util = new PathUtil();
         foreach ((string? extension, string expected) in new (string?, string)[]
@@ -40,7 +40,7 @@ public class PathUtilBehaviorTests
     }
 
     [Test]
-    public async Task ReservationsHandleConcurrentCollisionsAndEscapedUris()
+    public async ValueTask ReservationsHandleConcurrentCollisionsAndEscapedUris()
     {
         string root = Directory.CreateTempSubdirectory("path-tests-").FullName;
         try
@@ -63,7 +63,7 @@ public class PathUtilBehaviorTests
     }
 
     [Test]
-    public async Task TempDirectoriesNormalizePrefixesAndHonorCreate()
+    public async ValueTask TempDirectoriesNormalizePrefixesAndHonorCreate()
     {
         var util = new PathUtil();
         string uncreated = await util.GetUniqueTempDirectory(@"parent\child/", false);
@@ -82,7 +82,7 @@ public class PathUtilBehaviorTests
     }
 
     [Test]
-    public async Task CanceledOperationsDoNotCreatePaths()
+    public async ValueTask CanceledOperationsDoNotCreatePaths()
     {
         var util = new PathUtil();
         var token = new CancellationToken(true);
@@ -107,7 +107,7 @@ public class PathUtilBehaviorTests
     }
 
     [Test]
-    public async Task ReservationsCompleteWithASynchronizationContext()
+    public async ValueTask ReservationsCompleteWithASynchronizationContext()
     {
         string root = Directory.CreateTempSubdirectory("path-context-tests-").FullName;
         try
@@ -134,7 +134,7 @@ public class PathUtilBehaviorTests
     }
 
     [Test]
-    public async Task MissingDirectoryErrorsPropagate()
+    public async ValueTask MissingDirectoryErrorsPropagate()
     {
         string root = System.IO.Path.Combine(PathUtil.GetTempDirectory(), Guid.NewGuid().ToString("N"), "missing");
         try
