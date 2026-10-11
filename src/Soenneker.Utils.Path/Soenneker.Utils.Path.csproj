@@ -44,6 +44,6 @@
 
     <ItemGroup>
         <PackageReference Include="Soenneker.Extensions.String" Version="4.0.770" />
-        <PackageReference Include="Soenneker.Utils.ExecutionContexts" Version="4.0.42" />
+        <PackageReference Include="Soenneker.Utils.ExecutionContexts" Version="4.0.43" />
     </ItemGroup>
 </Project>
