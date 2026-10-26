@@ -27,7 +27,7 @@
         <ProjectReference Include="..\..\src\Soenneker.Utils.Path\Soenneker.Utils.Path.csproj" />
     </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Soenneker.Utils.File" Version="11.0.2326" />
+    <PackageReference Include="Soenneker.Utils.File" Version="11.0.2328" />
   </ItemGroup>
 </Project>
 
